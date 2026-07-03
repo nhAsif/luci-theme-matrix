@@ -32,7 +32,7 @@
 	//#patch-pages-end
 	const page = join('-', length(ctx?.request_path) ? ctx.request_path : (ctx?.path || []));
 	const has_patch = page in PATCH_PAGES;
-	const nav_type = tokens.nav_type || 'mega-menu';
+	const nav_type = tokens.nav_type || 'sidebar';
 	const toolbar_enabled = tokens.toolbar_enabled ? tokens.toolbar_enabled == '1' : true;
 	const icon_cache_version = tokens.icon_cache_version || '0';
 	const logo_svg = tokens.logo_svg || 'logo.svg';
