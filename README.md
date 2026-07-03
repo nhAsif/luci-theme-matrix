@@ -62,3 +62,5 @@ Matrix uses **Vite** and a modern front-end toolchain. Suggestions and PRs are a
 ## License & Credits
 
 [Apache 2.0](LICENSE). 
+
+This theme is a heavily modified and restyled fork of [luci-theme-aurora](https://github.com/eamonxg/luci-theme-aurora) originally created by [eamonxg](https://github.com/eamonxg).
