@@ -1,0 +1,39 @@
+name: LuCI Theme Matrix Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - master
+      - "feat/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build luci-theme-matrix ${{ matrix.pkg_type }}
+    runs-on: ubuntu-latest
+    # Tag pushes and manual dispatches always run; branch pushes only run
+    # when the head commit message contains the [build] marker, so feat
+    # branches opt in per-commit instead of firing on every push.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref_type == 'tag' ||
+      contains(github.event.head_commit.message, '[build]')
+    strategy:
+      matrix:
+        pkg_type: [ipk, apk]
+    steps:
+      - uses: eamonxg/build-luci-package@master
+        with:
+          package: luci-theme-matrix
+          pkg_type: ${{ matrix.pkg_type }}
+          prep_script: |
+            ./scripts/feeds update -f base luci
+            ./scripts/feeds install -p luci-base
+          artifact_paths: |
+            bin/packages/$ARCH/base/*luci-theme-matrix*.[ai]pk
+          release_body_path: .dev/docs/changelog/${{ github.ref_name }}.md

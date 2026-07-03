@@ -1,0 +1,27 @@
+/**
+ * Document foundation — shared by main.css and login.css.
+ * Solid bg on html/body — one paint path with header (no body::before;
+ * fixed pseudo made the same var(--bg) look mismatched).
+ */
+html {
+  @apply bg-bg text-text min-h-dvh font-mono;
+
+  body {
+    @apply bg-bg min-h-dvh;
+    text-shadow: 0 0 5px rgba(51, 255, 0, 0.5);
+  }
+
+  body::after {
+    content: " ";
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 9999;
+    background-size: 100% 2px, 3px 100%;
+    pointer-events: none;
+  }
+}

@@ -1,0 +1,516 @@
+header {
+  @apply bg-bg sticky top-0 z-40 mb-2 transition-colors duration-(--mega-menu-duration,300ms) ease-[cubic-bezier(0.4,0,0.6,1)];
+
+  & .header-content {
+    @apply relative z-10 flex h-14 items-center justify-between px-6 py-3 max-md:px-4 max-md:py-2;
+  }
+
+  [data-nav-type="mega-menu"] & {
+    /* Compositor-only curtain (supersedes the height transition, which paid
+       main-thread layout + repaint on every frame and janked low-end devices):
+       the container is a STATIC clip frame rooted at the bar, sized by
+       --mega-menu-height (the tallest panel, measured once in menu-matrix.js
+       and kept across open/close), and the reveal is a pair of opposite
+       translateY transitions — .desktop-menu-sheet (the opaque panel surface,
+       overflow-hidden) slides down from behind the bar while
+       .desktop-menu-canvas inside it counter-slides by the same distance, so
+       the content nets to a fixed position and the sheet's bottom edge wipes
+       it in, visually identical to the old drawer but animated entirely on
+       the compositor thread.
+
+       Apple's layer split still applies: the surface that animates must not
+       carry a backdrop-filter, or every frame re-rasterises the blur. The
+       sheet is fully opaque; the frost lives on the separate
+       .desktop-menu-overlay curtain.
+
+       Opacity is not animated on open — visibility gates the panel so the
+       descending sheet is opaque from the first visible frame. Closing is the
+       opposite: the whole menu surface fades out immediately while the sheet
+       retracts, so the frost, scrim and menu colour do not disappear in
+       separate stages. */
+    /* Apple-style clip frame: the opened surface starts at the top of the
+       header, not below it. The header content floats above this layer. The
+       header-height band is part of the moving sheet, so open and close share
+       the same page-top origin. */
+    & .desktop-menu-container {
+      @apply pointer-events-none invisible absolute inset-x-0 top-0 z-0 h-[calc(var(--mega-menu-height,0px)+3.5rem+3rem)] w-full overflow-clip max-md:hidden;
+
+      &.active,
+      &.closing {
+        @apply visible;
+      }
+
+      &.active {
+        @apply pointer-events-auto;
+      }
+
+      &.closing {
+        @apply opacity-0 transition-opacity duration-[220ms] ease-[cubic-bezier(0.4,0,0.6,1)] motion-reduce:transition-none;
+      }
+
+      /* The sheet is the whole opened surface, including the header-height
+         band. Its closed bottom edge is page top (not the header bottom), so
+         the close stops at the same origin that the reveal starts from. The
+         canvas counter-translates by the same travel distance so the menu
+         content remains visually fixed.
+
+         Duration is distance-adaptive via --mega-menu-duration, set on the
+         header by menu-matrix.js from apple.com's flyout pacing (2px/ms over
+         the visible travel, clamped to 240–480ms). */
+      & .desktop-menu-sheet {
+        @apply bg-mega-menu-bg absolute inset-x-0 top-0 h-[calc(var(--mega-menu-height,0px)+3.5rem)] -translate-y-full overflow-hidden transition-[translate] duration-(--mega-menu-duration,300ms) ease-[cubic-bezier(0.4,0,0.6,1)] motion-reduce:transition-none;
+        @apply after:border-hairline after:pointer-events-none after:absolute after:inset-0 after:border-b after:shadow-xl after:transition-opacity after:duration-(--mega-menu-duration,300ms) after:content-[''] motion-reduce:after:transition-none;
+      }
+
+      /* The counter-transform must mirror the sheet's endpoints and timing
+         exactly or the content drifts during the wipe — keep both in
+         lockstep. */
+      & .desktop-menu-canvas {
+        @apply absolute inset-0 translate-y-full transition-[translate] duration-(--mega-menu-duration,300ms) ease-[cubic-bezier(0.4,0,0.6,1)] motion-reduce:transition-none;
+      }
+
+      &.active .desktop-menu-sheet,
+      &.active .desktop-menu-canvas {
+        @apply translate-y-0;
+      }
+
+      &.closing .desktop-menu-sheet {
+        @apply after:opacity-0;
+      }
+
+      /* Category panels live inside .desktop-menu-canvas, not the nav items:
+         the transformed #topmenu would otherwise become the containing block
+         of a position:fixed panel and shrink the canvas to the menu's width.
+         Each panel is the same centered three-column grid (max-width fixed),
+         so switching categories is a pure cross-fade with no width shift.
+         The entering panel floats up 6px — translate + opacity only. */
+      /* The server-rendered board is only a template that menu-matrix.js
+         clones into each panel's right column — the original stays hidden. */
+      & > .desktop-menu-board {
+        @apply hidden;
+      }
+
+      & .desktop-nav {
+        /* Centered three-column canvas: anchor / links / device board.
+           Fixed max-width keeps every category the same width, so switching
+           is a pure cross-fade. Below lg the side tracks drop and only the
+           links column remains (tablet → just the submenu). The panel scrolls
+           internally when its content exceeds the viewport below the header. */
+        /* Tailwind v4 translate-* utilities emit the native `translate`
+           property, so that is what must be transitioned — transitioning
+           `transform` here left the 6px entrance float snapping instead of
+           animating (only the opacity ever faded). */
+        @apply pointer-events-none absolute inset-x-0 top-14 mx-auto grid max-h-[calc(100dvh-3.5rem)] max-w-[72rem] translate-y-1.5 grid-cols-[12rem_minmax(0,1fr)_13rem] gap-x-8 overflow-y-auto overscroll-contain px-10 pt-13 pb-8 opacity-0 transition-[opacity,translate] duration-[250ms] ease-out max-lg:max-w-[44rem] max-lg:grid-cols-1 max-lg:px-8;
+
+        &.active {
+          @apply pointer-events-auto translate-y-0 opacity-100;
+        }
+
+        & .desktop-nav-anchor {
+          @apply self-start max-lg:hidden;
+
+          & .desktop-nav-title {
+            @apply text-text flex items-center gap-2.5 text-2xl font-semibold tracking-tight;
+
+            /* First-level icon: mask + currentColor so it follows the theme.
+               --menu-icon comes from the shared name → icon map in
+               components/_nav.css; unmapped → default. */
+            &::before {
+              @apply size-6 shrink-0 bg-current content-[''] [mask:var(--menu-icon,url('@assets/icons/category.svg'))_center/contain_no-repeat];
+            }
+          }
+        }
+
+        & .desktop-nav-list {
+          /* Vertical fill, content-width columns. Row count per submenu via
+             --menu-rows (menu-matrix.js); more items grow rows, not width,
+             so the list stays inside the middle track. */
+          @apply grid grid-flow-col grid-rows-[repeat(var(--menu-rows,6),auto)] content-start justify-start gap-x-8 gap-y-1;
+
+          & > li {
+            @apply m-0 list-none;
+
+            & > a {
+              @apply text-text hover:bg-hover-faint block w-fit rounded-lg px-3 py-2 text-sm whitespace-nowrap no-underline transition-colors duration-150;
+
+              &.is-active-page {
+                @apply bg-brand-subtle text-brand font-medium;
+              }
+            }
+          }
+        }
+
+        /* Right column: device summary, cloned per panel. self-start so it
+           sits at the top regardless of how tall the links column grows. */
+        & .desktop-menu-board {
+          @apply border-hairline flex flex-col gap-2 self-start border-l pl-7 max-lg:hidden;
+
+          & .board-label {
+            @apply text-text-subtle mb-0.5 text-[11px] font-medium tracking-wide uppercase;
+          }
+
+          & .board-line {
+            /* items-start keeps the icon aligned to the FIRST text line when a
+               long value wraps. Icon height (size-4) == text leading (leading-4)
+               so a single line still reads as vertically centered. */
+            @apply text-text-muted flex max-w-full items-start gap-2.5 text-xs;
+
+            &::before {
+              @apply size-4 shrink-0 bg-current content-[''];
+            }
+
+            & .board-text {
+              @apply min-w-0 leading-4 [overflow-wrap:anywhere];
+            }
+          }
+
+          & .board-line-host::before {
+            @apply [mask:url('@assets/icons/router.svg')_center/contain_no-repeat];
+          }
+
+          & .board-line-model::before {
+            @apply [mask:url('@assets/icons/cpu.svg')_center/contain_no-repeat];
+          }
+
+          & .board-line-firmware::before {
+            @apply [mask:url('@assets/icons/package.svg')_center/contain_no-repeat];
+          }
+
+          & .board-line-kernel::before {
+            @apply [mask:url('@assets/icons/tag.svg')_center/contain_no-repeat];
+          }
+        }
+      }
+    }
+  }
+
+  /* The bar must sit above the z-60 curtain for the whole open AND the
+     whole retract, or the scrim would dim the closing panel. */
+  [data-nav-type="mega-menu"]
+    &:has(.desktop-menu-container:is(.active, .closing)) {
+    @apply z-70;
+  }
+
+  .brand {
+    @apply hover:text-brand text-text inline-block shrink-0 text-xl font-semibold tracking-tight no-underline transition-[color,transform] duration-150 hover:-translate-y-0.5 max-md:flex-1 max-md:text-lg;
+  }
+
+  .nav {
+    @apply absolute left-1/2 z-60 m-0 flex -translate-x-1/2 transform list-none items-center gap-1 p-0 max-md:hidden;
+
+    & > li {
+      @apply relative;
+
+      .menu {
+        @apply text-text hover:bg-hover-faint block rounded-xl px-3.5 py-1.5 font-medium no-underline transition-colors duration-150;
+
+        /* Unified pill for both dropdown modes — the open/active category is a
+           filled brand pill, matching the submenu links and the sidebar. */
+        &.menu-active {
+          @apply bg-brand-subtle text-brand;
+        }
+      }
+
+      /* Dropdown panels only — mega-menu panels are reparented into
+         .desktop-menu-container (see above). */
+      & .desktop-nav {
+        @apply pointer-events-none left-0 z-40 px-0 pt-0 opacity-0 transition-opacity duration-150;
+        [data-nav-type="dropdown"] & {
+          @apply absolute top-full mt-2 min-w-48;
+        }
+        &.active {
+          @apply pointer-events-auto opacity-100;
+        }
+
+        & .desktop-nav-list {
+          [data-nav-type="dropdown"] & {
+            @apply border-hairline bg-surface-overlay flex flex-col gap-y-1 rounded-3xl border py-2 shadow-lg backdrop-blur-md backdrop-saturate-150;
+          }
+          & > li {
+            @apply m-0 list-none;
+
+            & > a {
+              @apply text-text block whitespace-nowrap no-underline;
+
+              [data-nav-type="dropdown"] & {
+                @apply hover:bg-hover-faint mx-2 rounded-xl px-4 py-2 transition-colors duration-150;
+              }
+
+              /* Same active pill as the mega submenu and the top-level
+                 trigger — one unified vocabulary across both dropdown modes. */
+              &.is-active-page {
+                @apply bg-brand-subtle text-brand font-medium;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  .navigation-controls {
+    @apply mr-3 flex shrink-0 items-center md:hidden;
+
+    [data-nav-type="sidebar"] & {
+      @apply md:flex;
+    }
+
+    & .navigation-toggle {
+      @apply cursor-pointer rounded-none border-0 bg-transparent p-0 shadow-none transition-transform duration-150 hover:scale-105 active:scale-95;
+
+      & svg {
+        @apply text-text size-5;
+      }
+
+      & .navigation-toggle-line {
+        transform-box: fill-box;
+        @apply origin-center transition-[transform,opacity] duration-150 ease-in-out;
+      }
+
+      &.is-expanded {
+        & .navigation-toggle-line-top {
+          transform: translateY(5px) rotate(45deg);
+        }
+
+        & .navigation-toggle-line-middle {
+          transform: scaleX(0.35);
+          @apply opacity-0;
+        }
+
+        & .navigation-toggle-line-bottom {
+          transform: translate(3.75px, -5px) rotate(-45deg) scaleX(2);
+        }
+      }
+    }
+  }
+
+  #indicators {
+    @apply flex shrink-0 flex-row-reverse gap-5 md:gap-8;
+
+    & span[data-indicator] {
+      @apply before:text-text size-5 cursor-pointer text-[0px] before:absolute before:size-5 before:bg-current;
+
+      &[data-indicator="media_error"] {
+        @apply before:[mask:url('@assets/icons/error.svg')_center/cover_no-repeat];
+      }
+
+      &[data-indicator="poll-status"] {
+        &[data-style="active"] {
+          @apply before:[mask:url('@assets/icons/refresh.svg')_center/cover_no-repeat];
+        }
+
+        &[data-style="inactive"] {
+          @apply before:[mask:url('@assets/icons/refresh-off.svg')_center/cover_no-repeat];
+        }
+      }
+
+      &[data-indicator="uci-changes"] {
+        @apply relative before:[mask:url('@assets/icons/setting.svg')_center/cover_no-repeat];
+
+        &[data-count]:not([data-count="0"]) {
+          @apply after:bg-danger after:text-on-brand after:absolute after:-top-0.5 after:-right-0.5 after:z-10 after:flex after:min-h-3 after:min-w-3 after:items-center after:justify-center after:rounded-full after:px-0.5 after:text-[8px] after:leading-none after:font-bold after:shadow-sm after:content-[attr(data-count)];
+        }
+      }
+    }
+  }
+}
+
+body[data-nav-type="sidebar"] {
+  /* Desktop header + sidebar form one flush, L-shaped application frame: a
+     full-width header on top, a sidebar pinned to the left edge below it.
+     A CSS grid (not flex-wrap) keeps the header row at its natural height —
+     so collapsing the sidebar never stretches it — lets the sidebar column
+     animate to zero, and lets #maincontent fluidly reclaim the freed space.
+     overflow-x-clip keeps the sliding sidebar out of horizontal overflow. */
+  @apply md:grid md:grid-cols-[17rem_minmax(0,1fr)] md:grid-rows-[auto_minmax(0,1fr)] md:overflow-x-clip md:transition-[grid-template-columns] md:duration-[250ms] md:ease-out;
+
+  &.sidebar-collapsed {
+    @apply md:grid-cols-[0_minmax(0,1fr)];
+  }
+
+  & > header {
+    @apply md:border-hairline md:col-span-full md:row-start-1 md:mb-0 md:border-b;
+  }
+
+  & > .sidebar-panel {
+    @apply md:col-start-1 md:row-start-2;
+  }
+
+  & > #maincontent {
+    @apply md:col-start-2 md:row-start-2 md:min-w-0 md:pt-2;
+  }
+
+  & .header-crumb {
+    @apply text-text-muted my-0 mr-auto ml-6 hidden min-w-0 list-none items-center gap-2 overflow-hidden p-0 text-sm md:flex;
+
+    & li {
+      @apply m-0 list-none whitespace-nowrap;
+    }
+
+    & .crumb-sep {
+      @apply opacity-50;
+    }
+
+    & .current {
+      @apply text-text min-w-0 truncate font-medium;
+    }
+  }
+
+  & .sidebar-panel {
+    @apply border-hairline sticky top-14 hidden h-[calc(100vh-3.5rem)] w-full overflow-hidden rounded-none border-r transition-[visibility] duration-[250ms] md:block;
+  }
+
+  /* Visibility flips at the end of the slide so collapsed controls leave the
+     tab order without clipping the animation. */
+  &.sidebar-collapsed .sidebar-panel {
+    @apply invisible;
+  }
+
+  & .sidebar-panel-inner {
+    @apply bg-bg flex h-full w-68 flex-col overflow-hidden transition-[translate,opacity] duration-[250ms];
+  }
+
+  &.sidebar-collapsed .sidebar-panel-inner {
+    @apply -translate-x-full opacity-0;
+  }
+
+  & .sidebar-list {
+    @apply m-0 flex-1 list-none space-y-0.5 overflow-y-auto p-3;
+
+    & li {
+      @apply m-0 list-none;
+    }
+  }
+
+  & .sidebar-list .navigation-direct {
+    @apply truncate text-lg;
+  }
+
+  & .sidebar-submenu {
+    @apply m-0 min-h-0 list-none space-y-0.5 overflow-hidden p-0 pl-4;
+  }
+
+  & .sidebar-submenu .navigation-sublink {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  & .sidebar-footer {
+    @apply border-hairline shrink-0 border-t p-3;
+
+    /* Logout: muted at rest; on hover the base .nav-link pill background
+       plus error-colored text is the intended compound state (matches v1). */
+    & .nav-link {
+      @apply text-text-muted hover:text-danger;
+    }
+  }
+}
+
+#maincontent {
+  @apply max-w-max-width mx-auto min-h-[calc(100vh-4rem)] w-23/24 px-4 max-md:w-full max-md:px-3;
+
+  #view {
+    @apply mx-0 w-full bg-transparent p-0 shadow-none empty:hidden md:p-0;
+
+    .cbi-title-section {
+      @apply mb-6 leading-relaxed max-md:mx-2 max-md:mb-3;
+    }
+
+    .controls {
+      @apply m-2 flex flex-wrap items-center gap-3 max-md:m-1 max-md:gap-2;
+
+      & label {
+        & input[type="radio"],
+        & input[type="checkbox"] {
+          @apply mr-1 align-middle;
+        }
+      }
+    }
+
+    #content_syslog {
+      @apply m-2 max-md:m-1;
+
+      & > div {
+        @apply flex flex-wrap items-baseline gap-x-2 max-md:gap-x-1.5;
+        & > .cbi-input-select,
+        & > .cbi-input-text {
+          @apply max-md:min-w-45;
+        }
+      }
+    }
+
+    & div[style] {
+      & > svg {
+        @apply dark:!bg-surface;
+
+        & line[style] {
+          @apply dark:!stroke-text;
+        }
+      }
+    }
+  }
+
+  .cbi-map-descr,
+  .cbi-section-descr {
+    @apply text-text-muted mb-6 text-sm leading-relaxed max-md:mx-2 max-md:mb-3 max-md:text-sm;
+  }
+
+  .cbi-page-actions {
+    @apply border-hairline mt-6 flex flex-wrap items-center justify-end gap-3 border-t pt-4 max-md:mx-2 max-md:mt-4 max-md:gap-2 max-md:pt-3;
+  }
+
+  .zone-forwards {
+    @apply flex flex-nowrap items-stretch gap-2 leading-relaxed;
+
+    & > span {
+      @apply text-text-muted flex shrink-0 basis-8 items-center justify-center self-center;
+    }
+
+    .zone-src,
+    .zone-dest {
+      @apply flex flex-1 flex-col gap-1.5;
+    }
+  }
+
+  #syslog,
+  #log_textarea {
+    @apply w-full font-mono text-xs leading-snug;
+  }
+
+  #syslog {
+    @apply bg-surface-sunken text-text rounded-3xl border p-6 shadow-lg max-md:p-3;
+  }
+}
+
+footer {
+  @apply text-text-muted mt-2 flex min-h-16 flex-wrap items-center justify-between text-xs;
+
+  & a {
+    @apply text-brand;
+  }
+
+  & span {
+    @apply inline-block text-center;
+  }
+
+  & .breadcrumb {
+    @apply bg-surface-overlay hover:bg-surface flex items-center gap-1 rounded-full px-3 py-1.5 text-xs shadow-sm backdrop-blur-md backdrop-saturate-150 transition-colors duration-150;
+
+    & li {
+      @apply list-none;
+
+      &.active a {
+        @apply text-text;
+      }
+    }
+  }
+}
+
+.control-group {
+  @apply mt-1;
+}
+
+.control-group,
+.cbi-page-actions > div,
+.cbi-section-actions > div {
+  @apply flex flex-row flex-nowrap items-center gap-2 max-md:flex-wrap max-md:gap-1;
+}
