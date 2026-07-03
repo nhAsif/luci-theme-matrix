@@ -27,7 +27,7 @@ jobs:
       matrix:
         pkg_type: [ipk, apk]
     steps:
-      - uses: nhAsif/build-luci-package@master
+      - uses: eamonxg/build-luci-package@master
         with:
           package: luci-theme-matrix
           pkg_type: ${{ matrix.pkg_type }}
